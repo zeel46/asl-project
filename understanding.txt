@@ -1,0 +1,218 @@
+ASL PROJECT - HOW THE PROJECT WORKS
+===================================
+
+HOW TO RUN
+----------
+Everything is already extracted and trained. To use the website:
+    python app.py      -> then open http://127.0.0.1:5000 in Chrome/Edge, click "Turn camera on"
+    (use 127.0.0.1, not "localhost": on Windows "localhost" adds ~0.2 s delay per frame)
+
+To redo the graphs / training (raw data not needed, uses the CSV / npz files):
+    python visualize_data.py  -> dataset graph: data_distribution.png (samples per sign)  (~1 min)
+    python train_knn.py       -> letters + numbers KNN, K tuning, result graphs   (~2 min)
+    python train_words.py     -> words DTW-KNN + result graph                     (~3 min)
+
+Re-extracting from the raw photos/videos (only if the data changes) needs the raw datasets,
+which were moved to D:\asl_project_datasets\raw_datasets\ to keep this folder small.
+Move asl-hg, archive.zip, asl_alphabet_train and asl_subset back here first, then run
+mptocsv.py, extract_asl_hg.py, extract_wlasl.py.
+
+THE MAIN MODEL (show this): knn_scratch.py -> class KNNClassifier
+No ML library (no sklearn / tensorflow / pytorch) is used anywhere in the project.
+Also from scratch: dtw_knn.py (words), motion_letters.py (J/Z).
+MediaPipe is only a tool that finds the body/hand points; it knows nothing about ASL.
+
+
+WHAT THE WEBSITE CAN DO
+-----------------------
+Letters tab : 24 static letters (KNN) + J and Z (motion), hold 1 s to type a letter
+Numbers tab : 1-9 (KNN). Separate tab because 2/V, 6/W and 9/F share a handshape.
+Words tab   : 20 words (DTW + KNN). Press Record, 3-2-1 countdown, sign for 2.5 s.
+              Shows the word, the 3 closest words, and SUGGESTED REPLIES with a video
+              of how to sign the reply back (e.g. "sorry" -> "it's fine", "I forgive you").
+              Click a reply card to add it to the text.
+Everywhere  : status pill, hand skeleton, "closest matches" bars, text box
+              (Space / Delete / Clear / Copy), camera on/off button,
+              left and right hand both work. Light blue/green theme, model details
+              are kept out of the page (they are in this file and the result graphs).
+Words: thank you, sorry, please, yes, no, help, good, bad, what, where, who, you,
+       eat, drink, water, doctor, bathroom, fine, sick, family
+
+
+RESULTS (tested on people the model has NEVER seen)
+---------------------------------------------------
+Letters : 97.1% on 2 unseen people (P9, P10); old Kaggle-only model got 64.4% on them
+          cross-validation over the other people averaged ~85%
+          -> realistic expectation for a new person: roughly 85-97%
+          weak pairs: M->N, R->U (both are about hidden/crossed fingers)
+Numbers : 100% on the 2 unseen people (optimistic: each person's photos are very similar)
+Words   : 77.3% leave-one-signer-out on 20 words (random guessing = 5%)
+          weak words: you (3/8), bad (5/10), what (6/12)
+Full printouts: train_knn_output.txt, train_words_output.txt
+Graphs: knn_letters_results.png, knn_numbers_results.png, words_results.png
+        (left graph = accuracy vs K on training data and on unseen people: this is the
+         OVERFITTING / UNDERFITTING analysis. K=1 scores 100% on training data (memorising)
+         but not better on new people; very large K gets worse (too smooth). The best K is
+         picked by cross-validation on held-out people.)
+
+
+THE PIPELINES
+-------------
+Letters / numbers (one frame):
+  webcam frame -> MediaPipe Hands (21 points) -> flip if left hand
+  -> normalize_landmarks() (42 numbers) -> KNN (5 nearest of 36,715 stored hands) vote
+  -> if most votes are M or N: a second KNN that also uses depth (z) re-votes
+  -> browser: smooth over 8 frames, hold 1 s -> letter typed
+J / Z (movement):
+  last 2.5 s of hand points -> latest unbroken run of the J handshape (pinky up) or
+  Z handshape (index up) -> path of that fingertip -> rule check -> letter typed at once
+Words (a whole movement):
+  ~2.5 s of frames -> MediaPipe Holistic (shoulders + both hands) -> 24 numbers per frame
+  -> stretched/squeezed to 32 frames -> DTW distance to all 194 stored word videos
+  -> nearest one = the word -> replies looked up in words_config.py
+
+
+DATA
+----
+Files kept in this folder (the actual datasets the models use):
+  asl_landmarks.csv     Kaggle ASL Alphabet, 1 person, 24 letters (3,787 hands)
+  asl_hg_landmarks.csv  ASL-HG (Mendeley), 10 people P1-P10, letters + numbers (32,928 hands)
+                        (F has 944 instead of 1,000: 56 photos were skipped during a restart)
+  word_sequences.npz    WLASL, 194 word videos from 40 signers, as point sequences
+How they were made (raw data now in D:\asl_project_datasets\raw_datasets\):
+asl_alphabet_train/ -> asl_subset/ (~180 random photos per letter) -> mptocsv.py -> asl_landmarks.csv
+asl-hg/asl_dataset/ -> extract_asl_hg.py -> asl_hg_landmarks.csv
+   skipped from ASL-HG: 0 (two-handed in this dataset; one-handed 0 looks like O),
+   J and Z (they are movements; their photos are frozen frames that look like G/I)
+archive.zip (WLASL) -> extract_wlasl.py -> wlasl_words/<word>/*.mp4   253 videos of the 20 words + replies
+                    -> word_sequences.npz                   194 usable sequences, 40 different signers
+                    -> static/clips/<word>.mp4              1 clip per word/reply (the sharpest video)
+
+
+FILES
+-----
+knn_scratch.py  (from scratch: KNN + helpers)
+  normalize_landmarks(raw63, with_depth=False)
+      a) subtract the wrist from all points        -> hand can be anywhere on screen
+      b) divide by hand size (farthest point)      -> near/far from camera does not matter
+      c) keep x,y only (42 numbers), or x,y,z (63) when with_depth=True
+  euclidean_distance(a, b)  - sqrt(sum((a_i - b_i)^2)), plain loop version
+  pairwise_euclidean()      - same formula for many pairs at once (||a||^2 + ||b||^2 - 2ab)
+  KNNClassifier
+      fit()            - stores the data (KNN is a "lazy learner")
+      kneighbors()     - K closest stored samples, done in chunks of 500 so 30,000+ samples
+                         do not run out of memory
+      vote_neighbors() - majority vote, ties broken by smallest total distance
+      predict(), predict_with_confidence(), nearest_labels()
+      subset(labels)   - a KNN that only knows some labels (letters-only / numbers-only)
+      save() / load()
+  DEPTH_PAIR = ("M", "N") - the pair that gets the depth specialist
+  stratified_split(), stratified_kfold(), group_kfold() (folds by PERSON),
+  accuracy(), confusion_matrix(), per_class_report()
+
+train_knn.py
+  - loads Kaggle + ASL-HG hands, test set = people P9 and P10 (never used in training)
+  - K tuning with group_kfold: each fold hides 2 people, so K is chosen for NEW people
+  - evaluates letters and numbers separately, prints per-sign precision/recall/F1
+  - M/N depth specialist: if the prediction is M or N, a KNN on x,y,z decides
+    (M/N accuracy ~40% -> 81%, all letters 93.6% -> 97.1%)
+  - prints the old Kaggle-only model's score on the same people (domain shift: 64.4%)
+  - saves knn_model.npz (all hands), knn_depth_pair_model.npz, two result graphs
+
+dtw_knn.py  (from scratch: word classifier)
+  dtw_distance(a, b, window)
+      Dynamic Time Warping. Two people sign the same word at different speeds; DTW lines up
+      the frames (frame 5 of one can match frame 8 of the other) and adds up the distances
+      of the best alignment. Table D[i][j] = cost(i,j) + min(D[i-1][j], D[i][j-1], D[i-1][j-1]).
+      window = how far apart matched frames may be (Sakoe-Chiba band), 8 worked best.
+  DTWKNN
+      fit()     - stores the word sequences
+      rank()    - DTW distance to every stored video; nearest one wins (K=1 was best);
+                  also returns the next 2 closest words with closeness = best / their distance
+      save() / load()
+
+train_words.py
+  - leave-one-signer-out: each video is classified using only videos of OTHER signers
+  - tries window 4/8/32 and K 1/3/5, picks the best (window 8, K 1)
+  - saves words_model.npz, words_results.png (confusion matrix)
+
+word_features.py  (shared by extract_wlasl.py and app.py)
+  frame_points()      - MediaPipe Holistic on one frame: 2 shoulders + left/right hand points
+  sequence_features() - per frame, 12 numbers per hand (dominant hand first):
+                        wrist position relative to the middle of the shoulders, divided by
+                        shoulder width (WHERE the hand is: chin, chest...) +
+                        5 fingertips relative to the wrist, divided by hand size (hand SHAPE).
+                        A missing hand = "resting low". Left-handed signers are mirrored.
+                        The dominant hand = the hand that moves more.
+  resample()          - stretches/squeezes any video to exactly 32 frames
+
+motion_letters.py  (from scratch: J and Z)
+  has_shape()   - finger "up" if its tip is >1.15x farther from the wrist than its middle joint
+                  J = pinky up, others down;  Z = index up, others down
+  shape_run()   - the latest unbroken run of frames with that shape (max 2 glitch frames),
+                  so an earlier sign cannot interfere
+  is_z()        - fingertip path long enough, changes left/right direction at least twice,
+                  ends lower than it started
+  is_j()        - pinky path goes down, then hooks sideways at the end
+  is_moving()   - wrist moved > 0.25 hand sizes in 0.3 s; while moving, letters are not typed
+                  (stops D/I being typed in the middle of drawing Z/J)
+
+visualize_data.py - dataset graph: samples per sign, split by dataset
+                    written from scratch (centre the data, covariance matrix, eigenvectors,
+                    project on the 2 biggest). Letters with their own cloud are easy for KNN;
+                    overlapping letters (M/N) are the ones KNN confuses.
+hand_tracking.py  - MediaPipe Hands setup, get_hand() (aspect ratio fix + left-hand flip)
+mptocsv.py        - Kaggle photos -> asl_landmarks.csv (first extraction script)
+words_config.py   - the 20 words, the reply table, and the reply sentences
+extract_asl_hg.py - ASL-HG photos -> asl_hg_landmarks.csv (4 parallel workers, can resume)
+extract_wlasl.py  - copies the needed videos out of archive.zip, picks the sharpest clip of
+                    each word for the website, extracts word_sequences.npz
+
+WEBSITE
+  app.py  (Flask server)
+      /               - the page
+      /predict        - one frame -> hand points, 5 nearest-neighbour labels, J/Z, moving?
+      /word_frame     - one frame -> shoulders + hands (browser collects these while recording)
+      /classify_word  - the collected frames -> word, 3 closest words, replies + clip links
+  templates/index.html - layout (tabs, video, panels, word list, replies, text box)
+  static/style.css     - look (light pastel blue/green theme, works on phone width)
+  static/app.js        - browser side: camera on/off, sending frames, smoothing/voting,
+                         hold ring, J/Z, word recording with countdown, reply cards, text box
+  static/clips/        - reply / word videos from WLASL
+
+Removed during clean-up (moved to D:\asl_project_datasets\old_code_and_files\):
+dataprocessing.py, topup_subset.py, failuredet.py, failed_images.txt, normalization.py,
+asl_landmarks_normalized.csv, live_knn.py, correlation_heatmap.py, pca_visualize.py
+(replaced by visualize_data.py) and their old graphs.
+
+
+PROBLEMS FOUND AND FIXED
+------------------------
+1. Left hand did not work -> left hands are mirrored into right hands (MediaPipe tells us which).
+2. Huge values for tilted hands -> scale by farthest point instead of palm length.
+3. Depth (z) removed for the main KNN (noisy), but used for M vs N where it really helps.
+4. Webcam 4:3 vs square photos -> x multiplied by width/height.
+5. One person in training data (domain shift) -> added ASL-HG with 10 people.
+   Same unseen people: 64.4% -> 97.1%.
+6. 30,000+ samples ran out of memory -> neighbours computed in chunks of 500.
+7. J/Z lost when the hand disappears for a frame in fast motion -> history kept, old frames
+   simply expire after 2.5 s.
+8. A previous sign spoiled J/Z detection -> only the latest unbroken handshape run is used.
+9. Extraction was slow (1 CPU core) -> 4 parallel processes.
+10. Word confidence always 100% with K=1 -> show closeness of the nearest example of each word;
+    the site says "not sure" when the second word is almost as close.
+
+
+KNOWN LIMITS (say these honestly)
+---------------------------------
+- Accuracy numbers come from photos/videos; a live webcam will be a bit lower.
+- J/Z thresholds were tested with photos moved across the screen, not real wrist turns.
+- Words need shoulders and hands in view; only ~7-15 example videos per word.
+- The system recognises single signs, not ASL sentences/grammar or facial expressions.
+- Not a replacement for a qualified interpreter (medical, legal, emergency).
+
+
+About the .npz files: .npz is NumPy’s file format for saving several arrays in one compressed file, like a zip of tables. 
+KNN has no learned weights; “training” 
+just means storing the examples.
+ So these files hold the stored examples, and loading one gives you the trained model back.

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ASL Project</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <h1>ASL Project</h1>
+    <nav class="tabs">
+      <button class="tab active" data-mode="letters">Letters</button>
+      <button class="tab" data-mode="numbers">Numbers</button>
+      <button class="tab" data-mode="words" {% if not words %}disabled{% endif %}>Words</button>
+    </nav>
+  </header>
+
+  <main class="layout">
+    <section class="stage">
+      <div class="video-wrap">
+        <video id="cam" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div class="status" id="status"><span class="dot"></span><span id="statusText">Camera off</span></div>
+        <button class="cam-toggle hidden" id="stopBtn">Turn camera off</button>
+        <div class="countdown hidden" id="countdown"></div>
+        <div class="start" id="startScreen">
+          <h2>Camera is off</h2>
+          <p>Video stays on this computer.</p>
+          <button class="btn primary" id="startBtn">Turn camera on</button>
+          <p class="error" id="camError"></p>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel" id="signPanel">
+      <div class="card current">
+        <div class="ring-wrap">
+          <svg viewBox="0 0 120 120" class="ring">
+            <circle cx="60" cy="60" r="54" class="ring-bg"></circle>
+            <circle cx="60" cy="60" r="54" class="ring-fg" id="ringFg"></circle>
+          </svg>
+          <div class="big-letter" id="bigLetter">&ndash;</div>
+        </div>
+        <div class="hint" id="hint">Hold a sign still for 1 second to type it</div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">Closest matches</div>
+        <div id="guesses" class="guesses"></div>
+        <p class="note" id="modeNote">J and Z: draw them in the air.</p>
+      </div>
+    </aside>
+
+    <aside class="panel hidden" id="wordPanel">
+      <div class="card">
+        <p class="note top">Stand back so your face, shoulders and hands are in view, press Record, then sign one word after the countdown.</p>
+        <button class="btn primary wide" id="recordBtn">Record word</button>
+        <div class="progress"><div class="progress-fill" id="recordProgress"></div></div>
+      </div>
+
+      <div class="card">
+        <div class="word-result" id="wordResult">&ndash;</div>
+        <div id="wordGuesses" class="guesses"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">Words you can sign</div>
+        <div class="chips">
+          {% for w in words %}<span class="chip" data-sign="{{ w }}">{{ w }}</span>{% endfor %}
+        </div>
+      </div>
+    </aside>
+
+    <section class="replies card hidden" id="repliesCard">
+      <div class="card-label">Suggested replies &ndash; how to sign them back</div>
+      <div class="reply-grid" id="replies"></div>
+    </section>
+
+    <section class="composer card">
+      <div class="text-box"><span id="text"></span><span class="caret"></span><span class="placeholder" id="placeholder">Your signed text appears here</span></div>
+      <div class="actions">
+        <button class="btn" id="spaceBtn">Space</button>
+        <button class="btn" id="deleteBtn">Delete</button>
+        <button class="btn" id="clearBtn">Clear</button>
+        <button class="btn" id="copyBtn">Copy</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+194 videos, 20 words, 40 signers, 32 frames x 24 features
+  window=4   K=1  accuracy=0.7680
+  window=4   K=3  accuracy=0.7320
+  window=4   K=5  accuracy=0.7320
+  window=8   K=1  accuracy=0.7732
+  window=8   K=3  accuracy=0.7371
+  window=8   K=5  accuracy=0.7371
+  window=32  K=1  accuracy=0.7629
+  window=32  K=3  accuracy=0.7268
+  window=32  K=5  accuracy=0.7268
+
+Best: window=8, K=1 -> 0.7732 on signers never seen
+Random guessing would be 0.0500
+
+Per-word accuracy:
+  bad        5/10
+  bathroom   5/7
+  doctor     7/10
+  drink      11/15
+  eat        6/7
+  family     11/11
+  fine       6/9
+  good       7/10
+  help       13/14
+  no         8/11
+  please     7/7
+  sick       6/8
+  sorry      7/7
+  thank you  5/7
+  water      9/9
+  what       6/12
+  where      7/7
+  who        13/13
+  yes        8/12
+  you        3/8
+Saved words_model.npz and words_results.png

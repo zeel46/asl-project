@@ -1,0 +1,14 @@
+aslenv/
+venv/
+__pycache__/
+*.pyc
+
+archive.zip
+asl_alphabet_train/
+asl_subset/
+asl-hg/
+wlasl_words/
+
+*.log
+*.err
+~$*
